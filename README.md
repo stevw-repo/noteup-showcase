@@ -12,7 +12,7 @@ treats the law as a living stream: new legislation, amendments and judgments are
 as they're published, read by **frontier large language models**, **verified against the
 source**, and woven into a **semantically searchable knowledge base** in which every
 authority carries its own up-to-date history. Humans stay in the loop: nothing goes live
-without approval. Built for **Ask.Legal**.
+without approval. Built for [**Ask.Legal**](https://ask.legal/).
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM-in-the-loop](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) 
 
