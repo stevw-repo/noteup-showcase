@@ -14,10 +14,10 @@ source**, and woven into a **semantically searchable knowledge base** in which e
 authority carries its own up-to-date history. Humans stay in the loop: nothing goes live
 without approval. Built for [**Ask.Legal**](https://ask.legal/).
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM-in-the-loop](https://img.shields.io/badge/LLM-Azure_OpenAI_%C2%B7_Codex-412991) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) 
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM-in-the-loop](https://img.shields.io/badge/LLM-in_the_loop-412991) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) 
 
 
-[Why noteup](#why-noteup) · [What it does](#what-it-does) · [Coverage](#coverage) · [Applications](#applications) · [Architecture](#architecture) · [Engineering](#engineering-highlights) · [Roadmap](#roadmap)
+[Why noteup](#why-noteup) · [What it does](#what-it-does) · [Coverage](#coverage) · [Applications](#applications) · [Architecture](#architecture) · [Review](#review-workflow) · [Deployment](#deployment) · [Engineering](#engineering-highlights) · [Roadmap](#roadmap)
 
 </div>
 
@@ -182,6 +182,65 @@ noteup review approve    # publish them (or hold, reject, rollback)
 ```
 
 A systemd timer runs `sync` and `read` every night.
+
+## Review workflow
+
+Every change reaches the live table through a review. Reviews can run as often as the
+team likes; syncing carries on in the background, and new changes simply wait for the
+next one.
+
+```mermaid
+flowchart LR
+    working[("Working<br/>records")] -- "review start" --> review["Open review<br/>frozen snapshot + report"]
+    review -- "hold · release<br/>settle treatments" --> review
+    review -- approve --> live[("Live<br/>records")]
+    review -- reject --> unchanged["Live unchanged"]
+    live -- rollback --> previous["Live as before<br/>that review"]
+```
+
+1. **Start.** Every difference between Working and Live (each add, change and removal) is
+   frozen into a review in a single statement, and a report is written as HTML and Markdown.
+2. **Read the report.** It shows every change side by side with what's live now, plus
+   sources that failed, items the LLM couldn't process, treatments that need a decision,
+   possible corrected versions of judgments, and anything still missing an embedding.
+3. **Hold and settle.** Reviewers hold single records with a reason; a hold carries over
+   to later reviews until the record changes again. Treatments the model couldn't classify
+   are settled by hand, and their effect joins the next review.
+4. **Approve or reject.** Approval applies every change that isn't held in one
+   transaction, and records who approved it, when, and a hash of the exact change set. It
+   refuses if any live record would be left without an embedding. Rejection leaves Live
+   untouched, with a reason on record.
+5. **Roll back.** Any approved review can be undone, restoring Live exactly as it was. It
+   refuses if a later review changed the same records, so history can't be scrambled.
+
+```bash
+noteup review start                       # freeze the changes, write the report
+noteup review hold <record> --reason "…"  # keep one change out
+noteup treatment set <id> <kind|none>     # settle a treatment the model couldn't decide
+noteup review approve                     # or: reject --reason "…"
+noteup review rollback <review>           # undo an approved review
+```
+
+## Deployment
+
+One program and one database, so deployment stays small. The same code runs locally or
+in the cloud; only settings change.
+
+| | Today | Cloud (planned) |
+|---|---|---|
+| **Scheduling** | systemd timer on a Linux machine, nightly | Azure Container Apps Job on a schedule |
+| **Database** | PostgreSQL 17 + pgvector in Docker | Azure Database for PostgreSQL with pgvector |
+| **File store** | Local disk, content-addressed | Azure Files share |
+| **LLM** | Azure OpenAI, or the OpenAI Codex CLI | Azure OpenAI |
+| **Embeddings** | Azure OpenAI `text-embedding-3-small` | Azure OpenAI `text-embedding-3-small` |
+
+- **Configuration** is all environment variables; secrets stay out of the repository.
+- **Schema upgrades** are additive and idempotent: `noteup db init` adds whatever is
+  missing, so updating is "pull, init, run".
+- **Least privilege** in the database: the sync role writes everything except the live
+  table, and only approve and rollback use the role that can publish.
+- **No export step.** The search application reads the live table directly, so what
+  reviewers approve is exactly what users get.
 
 ## Engineering highlights
 
