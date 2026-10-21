@@ -7,11 +7,15 @@
 
 ### The law, noted up every day.
 
-An LLM-powered pipeline that keeps **Ask.Legal**'s Hong Kong legal search database current:
-legislation, gazetted amendments and court judgments, extracted with large language models,
-verified by code, and published only after human review.
+noteup keeps legal research databases current. It follows new legislation and judgments
+as they're published, reads them with large language models (LLMs), and flags what later
+events did to the law you already hold. A person approves every change before anyone
+relies on it. Built for **Ask.Legal**.
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM: Azure OpenAI · Codex](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white) ![Status: in production](https://img.shields.io/badge/status-in_production-2EA44F)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM: Azure OpenAI · Codex](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white) ![Status: early stage](https://img.shields.io/badge/status-early_stage-E3A72F)
+
+
+[Why noteup](#why-noteup) · [What it does](#what-it-does) · [Coverage](#coverage) · [Applications](#applications) · [Architecture](#architecture) · [Engineering](#engineering-highlights) · [Roadmap](#roadmap)
 
 </div>
 
@@ -21,53 +25,101 @@ verified by code, and published only after human review.
 
 ---
 
-## At a glance
+## Why noteup
 
-<table>
-<tr>
-<td align="center"><b>62,899</b><br>legislation records<br><sub>2,354 instruments, English + Chinese</sub></td>
-<td align="center"><b>~63,000</b><br>judgments collected<br><sub>CFA and CA since 1997, CFI since 2021</sub></td>
-<td align="center"><b>17,700+</b><br>legal-point records<br><sub>and growing every night</sub></td>
-</tr>
-<tr>
-<td align="center"><b>1,000+</b><br>judgments read per hour<br><sub>16 parallel LLM workers</sub></td>
-<td align="center"><b>$1.27</b><br>to embed 63,000 texts<br><sub>text-embedding-3-small</sub></td>
-<td align="center"><b>2 weeks</b><br>first commit to daily production<br><sub>8 → 21 October 2026</sub></td>
-</tr>
-</table>
+The law doesn't stand still. Sections are amended, new judgments are handed down every
+day, and cases that were good law last year are doubted or overruled. Lawyers call
+checking for this *noting up*. Done by hand, it's slow and easy to miss.
 
-<sub>Figures as of 21 October 2026.</sub>
+Legal search tools and AI assistants have the same problem, only silently. A database
+built once starts going out of date the next day, and an assistant that confidently
+cites a repealed section or an overruled case is worse than one that says nothing.
 
-## The problem
+noteup was built for **Ask.Legal**, to keep its Hong Kong legal search database current. It
+does the noting up for a whole database, continuously:
 
-Ask.Legal answers legal questions from a search database of Hong Kong law. That database is
-only as good as it is current: sections get amended, new judgments are handed down daily,
-and earlier cases are doubted or overruled. A legal AI that cites a superseded section or an
-overruled case is worse than one that says nothing.
-
-Keeping it current by hand means reading every new judgment, every gazetted amendment, and
-working out what each one did to the law already in the database. noteup automates that
-work, *noting up* the database every day, while keeping a person in charge of what goes live.
+- **Current.** New legislation, amendments and judgments are picked up as they're published,
+  and made searchable by meaning, not just keywords.
+- **Careful.** What later events did to older material is marked on it, not left for the
+  reader to discover.
+- **Accountable.** Nothing changes for your users until a person has reviewed and approved
+  it. Any update can be undone.
 
 ## What it does
 
-- **Legislation.** Parses the official consolidated text of every Ordinance and piece of
-  subsidiary legislation into one bilingual record per provision, and re-processes a chapter
-  only when its published version changes.
-- **Amendment warnings.** An LLM reads each newly gazetted amending instrument to find which
-  chapters it changes and when each change commences. Until the consolidated text catches up,
-  the affected records carry a warning.
-- **Judgments → legal points.** An LLM reads each judgment and extracts its legal points:
-  the issue, the proposition, how it was applied, ratio or obiter, the legislation and
-  authorities relied on, and supporting quotes with paragraph numbers.
-- **Citator.** A second LLM pass finds where a judgment follows, applies, doubts or
-  overrules an earlier one, links it to the exact point affected, and applies the effect.
-  Overruled points are kept and marked not in force, so the full history survives.
-- **Semantic search.** Every record is embedded into pgvector, ready for semantic retrieval
-  and retrieval-augmented generation (RAG).
-- **Human review.** Changes collect in a working copy. A reviewer freezes them into a
-  review, reads a side-by-side report, holds anything doubtful, and approves the rest in one
-  transaction. Any approved review can be rolled back.
+**For legislation**
+
+- Keeps every provision up to date, in each official language.
+- Reads newly published amendments to work out what changes and when, and warns when an
+  amendment has come into force but the official consolidated text hasn't caught up yet,
+  so nobody relies on wording that has already changed.
+
+**For case law**
+
+- Uses natural language processing to turn each judgment into its legal points: the
+  issue, the proposition, how it was applied, and whether it was necessary to the decision
+  or said in passing.
+- Backs every point with the court's own words and paragraph numbers, checked word for
+  word against the judgment.
+- Recognises how later judgments treat earlier ones, and links each treatment to the
+  exact point affected:
+
+| When a later judgment… | noteup… |
+|---|---|
+| follows, applies or approves a point | notes it, e.g. *Applied in X v Y at [55].* |
+| doubts, criticises or disapproves it | adds a warning to the point |
+| overrules or reverses it | keeps the point, marks it **not in force**, and says why |
+| distinguishes it | leaves it as it is |
+
+Overruled law isn't deleted. Your search can leave it out by default and still show a
+case's full history when it's needed.
+
+**For the people in charge**
+
+- A review report shows every proposed change side by side with what's live now.
+- Reviewers approve in batches, hold back anything doubtful, and settle the few cases
+  the model couldn't decide.
+- A published update can be rolled back in one step.
+
+## Coverage
+
+| Jurisdiction | Legislation | Case law | Status |
+|---|---|---|---|
+| Hong Kong | Ordinances and subsidiary legislation, with amendment warnings | Court of Final Appeal, Court of Appeal, Court of First Instance | Running daily |
+| Other common law jurisdictions | — | — | Planned |
+
+noteup is built so a new jurisdiction is a new set of sources, not a new system: the
+records, the treatment rules and the review all stay the same.
+
+## Applications
+
+noteup provides the data layer: current, structured, verified law with semantic
+embeddings. These are some of the applications it is designed to support.
+
+**For lawyers**
+
+- **Semantic search.** Ask in plain language, for example *"When can a tenant withhold
+  rent for disrepair?"*, and get the relevant provisions and case points, in English or
+  Chinese.
+- **Citator.** Look up a case or section and see everything that has happened to it since.
+- **Authority checking.** Scan a submission, opinion or contract for authorities that have
+  since been overruled, repealed or amended.
+- **Current awareness.** Alerts when the law changes in a practice area, or in the law a
+  client relies on.
+- **Research memos.** First drafts grounded in current law, with pinpoint citations.
+- **Precedent by facts.** Each point records the facts needed to understand it, so you can
+  search by situation, not just by doctrine.
+
+**For legal technology and in-house teams**
+
+- **Retrieval-augmented generation (RAG).** Ground LLM assistants in current law, with
+  citations to the exact paragraph and warnings that keep them from relying on bad law.
+- **Regulatory change tracking.** What changed in the rules that matter to you, and when
+  it takes effect.
+- **Case law analytics.** Which points are most followed, which are doubted, and how
+  authority flows between courts.
+- **Comparative law.** As coverage grows, how different common law jurisdictions answer
+  the same question.
 
 ## Architecture
 
@@ -95,6 +147,34 @@ do the work: `sync` talks only to the official websites, and `read` does all the
 on what was saved. A website outage and an LLM usage limit never block each other, and
 either step can stop at any point and pick up where it left off.
 
+### What you get
+
+One record per provision or legal point, in Postgres with pgvector:
+
+| Field | |
+|---|---|
+| `text` | The provision or point with its context, ready to embed and show |
+| `authority_note` | Warnings and treatment notes. Pass it to your model alongside `text` |
+| `in_force` | `false` for overruled or reversed points. Filter on it in search |
+| `id`, `source`, `type`, `jurisdiction` | Stable ID (`hk-leg:cap622g:s5`, `hk-case:2024-hkcfa-12:para48`), link to the official source, and where it applies |
+
+Embeddings are created for you, so records are ready for semantic search. LLM output is
+never trusted as is: it's checked against the source before it becomes a record, and
+published text only changes through an approved review.
+
+### Workflow
+
+```bash
+noteup sync      # collect what's new from the official sources (no LLM calls)
+noteup read      # extract with the LLM, check, build records and embeddings
+noteup status    # runs, failures, what's waiting, usage and spend
+
+noteup review start      # freeze the changes and write a side-by-side report
+noteup review approve    # publish them (or hold, reject, rollback)
+```
+
+A systemd timer runs `sync` and `read` every night.
+
 ## Engineering highlights
 
 ### Trusting LLM output only after code has checked it
@@ -116,9 +196,9 @@ as instructions, which guards against prompt injection from source documents.
 Batches of near-identical judgments (779 right-of-abode appeals in one year, for example)
 would waste LLM budget and flood search with duplicates. noteup fingerprints each
 judgment's reasoning, masking party names and incidental numbers but keeping statutory
-references, so applying a different section is never a match. **6,173 judgments** are read
-once through a representative, which carries a note that the same reasoning was applied in
-N other judgments. Translations, corrigenda, sentencing remarks and short orders are set
+references, so applying a different section is never a match. Each group is read once
+through a representative, which carries a note that the same reasoning was applied in N
+other judgments. Translations, corrigenda, sentencing remarks and short orders are set
 aside before any LLM call.
 
 ### A citator with court-hierarchy rules
@@ -153,39 +233,10 @@ stay attached.
 - An **LLM response cache** keyed on prompt version, model and input makes re-runs free.
 - **Spending and usage caps** stop reading cleanly and resume on the next run.
 - **Reading hours** confine LLM calls to a nightly window.
-- New judgments are read **newest first**, so the most useful law arrives first while a
-  52,000-judgment backlog works through.
+- Judgments are read **newest first**, so the most useful law arrives first while the
+  historical backlog works through.
 - A run log and a `status` command show runs, failures, backlog, usage and spend at a glance.
 
-```text
-$ noteup status
-Last runs:
-  #11    read                   Wed 21 Oct 19:02  running
-  #10    sync                   Wed 21 Oct 19:00     2 min  ok
-
-Waiting:
-  judgments to read:      48,426
-  Gazette items to read:  0
-  treatments to connect:  1,595
-  needs a decision:       5
-  texts to embed:         10,035
-  open review:            none
-```
-
-## Data model
-
-Every record shares one shape, ready for hybrid search and RAG:
-
-| Field | Purpose |
-|---|---|
-| `id` | Stable ID: `hk-leg:cap622g:s5`, `hk-case:2024-hkcfa-12:para48` |
-| `text` | A *Context* block (instrument or case, court, date, outcome, ratio or obiter) and the *Passage*. This is what gets embedded |
-| `authority_note` | Amendment warnings and treatment notes. Passed to the LLM alongside `text`, not embedded |
-| `in_force` | `false` for overruled or reversed points: filtered out of search, kept for history |
-| `type`, `source`, `country`, `jurisdiction` | Record kind, link to the official source, and where it applies |
-
-Behind the records, Postgres tables hold every download, run, judgment version, gazette
-item, amendment, treatment, LLM call (with tokens and cost), review and held change.
 
 ## Quality
 
@@ -205,15 +256,13 @@ item, amendment, treatment, LLM call (with tokens and cost), review and held cha
 About 4,200 lines of application code and 1,700 lines of tests. No frameworks and no extra
 services: one program and one database, by design.
 
-## Status and roadmap
+## Roadmap
 
-In production since **21 October 2026**, running every night.
-
-- [x] Hong Kong legislation, amendment warnings, and CFA, CA and CFI judgments
-- [x] Citator with court-hierarchy rules; overruled law kept and marked
-- [ ] Connecting Ask.Legal's search to the live table
+- [x] Hong Kong legislation, amendment warnings and superior court judgments
+- [x] Treatment tracking, with overruled law kept and marked
 - [ ] More common law jurisdictions
-- [ ] Running in the cloud (Azure Container Apps)
+- [ ] Hong Kong judgments from all years and courts
+- [ ] Hosted deployment in the cloud
 - [ ] Reviews from Ask.Legal's admin portal
 
 ## About
