@@ -5,7 +5,7 @@
   <img src="assets/logo-light.svg" alt="noteup" width="244">
 </picture>
 
-### The law, noted up every moment.
+### The law, continuously integrated.
 
 noteup is a **continuous legal intelligence engine**. Instead of a static snapshot, it
 treats the law as a living stream: new legislation, amendments and judgments are ingested
@@ -199,7 +199,7 @@ for the model to copy from. A second failure marks the judgment "couldn't proces
 person to see. Downloaded text is passed to the model as clearly delimited data and never
 as instructions, which guards against prompt injection from source documents.
 
-### Semantic deduplication with reasoning fingerprints
+### Deduplication with reasoning fingerprints
 
 Batches of near-identical judgments (779 right-of-abode appeals in one year, for example)
 would waste LLM budget and flood search with duplicates. noteup fingerprints each
