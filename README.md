@@ -14,7 +14,7 @@ source**, and woven into a **semantically searchable knowledge base** in which e
 authority carries its own up-to-date history. Humans stay in the loop: nothing goes live
 without approval. Built for [**Ask.Legal**](https://ask.legal/).
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM-in-the-loop](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) 
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM-in-the-loop](https://img.shields.io/badge/LLM-Azure_OpenAI_%C2%B7_Codex-412991) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) 
 
 
 [Why noteup](#why-noteup) · [What it does](#what-it-does) · [Coverage](#coverage) · [Applications](#applications) · [Architecture](#architecture) · [Engineering](#engineering-highlights) · [Roadmap](#roadmap)
