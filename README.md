@@ -7,12 +7,14 @@
 
 ### The law, noted up every day.
 
-noteup keeps legal research databases current. It follows new legislation and judgments
-as they're published, reads them with large language models (LLMs), and flags what later
-events did to the law you already hold. A person approves every change before anyone
-relies on it. Built for **Ask.Legal**.
+noteup is a **continuous legal intelligence engine**. Instead of a static snapshot, it
+treats the law as a living stream: new legislation, amendments and judgments are ingested
+as they're published, read by **frontier large language models**, **verified against the
+source**, and woven into a **semantically searchable knowledge base** in which every
+authority carries its own up-to-date history. Humans stay in the loop: nothing goes live
+without approval. Built for **Ask.Legal**.
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM: Azure OpenAI · Codex](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white) ![Status: early stage](https://img.shields.io/badge/status-early_stage-E3A72F)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white) ![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector-4169E1?logo=postgresql&logoColor=white) ![LLM: Azure OpenAI · Codex](https://img.shields.io/badge/LLM-Azure_OpenAI_·_Codex-412991) ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white) ![RAG-ready](https://img.shields.io/badge/RAG-ready-0E8A16) ![Human-in-the-loop](https://img.shields.io/badge/human-in_the_loop-6F42C1) ![Status: early stage](https://img.shields.io/badge/status-early_stage-E3A72F)
 
 
 [Why noteup](#why-noteup) · [What it does](#what-it-does) · [Coverage](#coverage) · [Applications](#applications) · [Architecture](#architecture) · [Engineering](#engineering-highlights) · [Roadmap](#roadmap)
@@ -38,12 +40,12 @@ cites a repealed section or an overruled case is worse than one that says nothin
 noteup was built for **Ask.Legal**, to keep its Hong Kong legal search database current. It
 does the noting up for a whole database, continuously:
 
-- **Current.** New legislation, amendments and judgments are picked up as they're published,
-  and made searchable by meaning, not just keywords.
-- **Careful.** What later events did to older material is marked on it, not left for the
-  reader to discover.
-- **Accountable.** Nothing changes for your users until a person has reviewed and approved
-  it. Any update can be undone.
+- **Continuously current.** New legislation, amendments and judgments are ingested as
+  they're published, and made searchable by meaning, not just keywords.
+- **History-aware.** Every authority knows what has happened to it since: amended,
+  followed, doubted or overruled.
+- **Human-in-the-loop.** AI does the reading, people sign off, and every change is
+  reversible.
 
 ## What it does
 
@@ -74,7 +76,7 @@ does the noting up for a whole database, continuously:
 Overruled law isn't deleted. Your search can leave it out by default and still show a
 case's full history when it's needed.
 
-**For the people in charge**
+**Human-in-the-loop governance**
 
 - A review report shows every proposed change side by side with what's live now.
 - Reviewers approve in batches, hold back anything doubtful, and settle the few cases
@@ -98,7 +100,7 @@ embeddings. These are some of the applications it is designed to support.
 
 **For lawyers**
 
-- **Semantic search.** Ask in plain language, for example *"When can a tenant withhold
+- **Semantic legal search.** Ask in plain language, for example *"When can a tenant withhold
   rent for disrepair?"*, and get the relevant provisions and case points, in English or
   Chinese.
 - **Citator.** Look up a case or section and see everything that has happened to it since.
@@ -124,22 +126,28 @@ embeddings. These are some of the applications it is designed to support.
 ## Architecture
 
 ```mermaid
-flowchart TB
-    subgraph collect["1 · Collect (no LLM)"]
-        direction LR
-        src["Official sources"] --> fetch["Polite fetcher<br/>retries · resumable"] --> raw[("Content-addressed<br/>file store")]
+flowchart LR
+    subgraph collect["1 · Collect"]
+        direction TB
+        src["Official<br/>sources"] --> fetch["Polite fetcher"] --> raw[("File store")]
     end
-    subgraph read["2 · Read (LLM)"]
-        direction LR
-        llm["Structured extraction<br/>JSON schema"] --> verify{"Code checks"}
-        verify -. "fail: retry<br/>with feedback" .-> llm
-        verify -- pass --> working[("Working records")] --> embed["Embeddings"]
+    subgraph ingest["2 · Ingest"]
+        direction TB
+        llm["LLM structured<br/>extraction"]
     end
-    subgraph publish["3 · Publish (human)"]
-        direction LR
-        snap["Review snapshot<br/>+ report"] --> approve(["Approve · hold<br/>reject · rollback"]) --> live[("Live records")] --> app["Ask.Legal search"]
+    subgraph verify["3 · Verify"]
+        direction TB
+        checks{"Code checks<br/>retry on fail"} --> working[("Working records<br/>+ embeddings")]
     end
-    collect --> read --> publish
+    subgraph govern["4 · Govern"]
+        direction TB
+        snap["Review<br/>snapshot"] --> approve(["Approve · hold<br/>reject · rollback"])
+    end
+    subgraph serve["5 · Serve"]
+        direction TB
+        live[("Live<br/>records")] --> app["Ask.Legal<br/>search"]
+    end
+    collect --> ingest --> verify --> govern --> serve
 ```
 
 One Python program and one Postgres database, run daily by a systemd timer. Two commands
@@ -191,7 +199,7 @@ for the model to copy from. A second failure marks the judgment "couldn't proces
 person to see. Downloaded text is passed to the model as clearly delimited data and never
 as instructions, which guards against prompt injection from source documents.
 
-### Finding the same reasoning under different case numbers
+### Semantic deduplication with reasoning fingerprints
 
 Batches of near-identical judgments (779 right-of-abode appeals in one year, for example)
 would waste LLM budget and flood search with duplicates. noteup fingerprints each
@@ -201,7 +209,7 @@ through a representative, which carries a note that the same reasoning was appli
 other judgments. Translations, corrigenda, sentencing remarks and short orders are set
 aside before any LLM call.
 
-### A citator with court-hierarchy rules
+### A rule-grounded AI citator
 
 Each treatment is resolved by neutral citation, case number or law-report citation. Fixed
 rules decide the effect: a note for *followed / applied / approved*, a warning for
@@ -217,7 +225,7 @@ so re-reading a judgment after a prompt change updates records in place rather t
 replacing them. That keeps review diffs small and meaningful, and lets holds and treatments
 stay attached.
 
-### Publishing that can't half-happen
+### Transactional, reversible publishing
 
 - A review is frozen in **one SQL statement**, so it is a consistent snapshot even while a
   sync is writing.
@@ -227,7 +235,7 @@ stay attached.
   audit trail. Rollback refuses if a later review touched the same records.
 - **Database roles** enforce the boundary: the sync role cannot write the live table at all.
 
-### Running unattended on a budget
+### Autonomous, budget-aware operation
 
 - A Postgres **advisory lock** prevents overlapping runs.
 - An **LLM response cache** keyed on prompt version, model and input makes re-runs free.
