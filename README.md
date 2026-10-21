@@ -72,27 +72,22 @@ work, *noting up* the database every day, while keeping a person in charge of wh
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph collect["Collect · no LLM"]
-        direction TB
-        src["Official sources<br/>legislation · gazette · judgments"] --> fetch["Polite fetcher<br/>retries · resumable"]
-        fetch --> raw[("Content-addressed<br/>file store")]
+flowchart TB
+    subgraph collect["1 · Collect (no LLM)"]
+        direction LR
+        src["Official sources"] --> fetch["Polite fetcher<br/>retries · resumable"] --> raw[("Content-addressed<br/>file store")]
     end
-    subgraph read["Read · LLM"]
-        direction TB
-        llm["Structured extraction<br/>JSON schema"] --> verify{"Code checks<br/>exact quotes · names · size"}
-        verify -- "fail: one retry<br/>with feedback" --> llm
-        verify -- pass --> working[("Working records")]
-        working --> embed["Embeddings"]
+    subgraph read["2 · Read (LLM)"]
+        direction LR
+        llm["Structured extraction<br/>JSON schema"] --> verify{"Code checks"}
+        verify -. "fail: retry<br/>with feedback" .-> llm
+        verify -- pass --> working[("Working records")] --> embed["Embeddings"]
     end
-    subgraph publish["Publish · human"]
-        direction TB
-        snap["Review snapshot<br/>+ HTML report"] --> approve{"Approve / hold<br/>reject / rollback"}
-        approve --> live[("Live records")]
+    subgraph publish["3 · Publish (human)"]
+        direction LR
+        snap["Review snapshot<br/>+ report"] --> approve(["Approve · hold<br/>reject · rollback"]) --> live[("Live records")] --> app["Ask.Legal search"]
     end
-    raw --> llm
-    embed --> snap
-    live --> app["Ask.Legal search"]
+    collect --> read --> publish
 ```
 
 One Python program and one Postgres database, run daily by a systemd timer. Two commands
