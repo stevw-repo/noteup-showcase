@@ -22,7 +22,7 @@ without approval. Built for [**Ask.Legal**](https://ask.legal/).
 </div>
 
 > [!NOTE]
-> This repository is a showcase of a private project. The source code isn't public. I'm happy
+> This repository is a showcase of a private project. The source code isn't public for commercial reasons. I'm happy
 > to walk through it on request.
 
 ---
