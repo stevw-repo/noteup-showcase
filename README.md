@@ -68,30 +68,42 @@ does the noting up for a whole database, continuously:
 
 | When a later judgment… | noteup… |
 |---|---|
-| follows, applies or approves a point | notes it, e.g. *Applied in X v Y at [55].* |
-| doubts, criticises or disapproves it | adds a warning to the point |
-| overrules or reverses it | keeps the point, marks it **not in force**, and says why |
+| follows, applies, approves or explains a point | notes it, e.g. *Applied in X v Y at [55].* |
+| doubts, criticises, disapproves, limits or declines to follow it | adds a warning to the point |
+| overrules it | keeps the point, marks it **not in force**, and says why |
+| affirms or reverses the judgment on appeal | notes it, or warns, on every point of the judgment |
 | distinguishes it | leaves it as it is |
 
 Overruled law isn't deleted. Your search can leave it out by default and still show a
 case's full history when it's needed.
 
+- Recognises what judgments do to legislation, and puts a warning on a section a court
+  has held inconsistent with the Basic Law or the Bill of Rights, and a note on one it
+  has read down.
+- Recognises new laws that reverse, change or codify a court decision, from the
+  Government's own explanation of each Bill, and warns on the points affected.
+- Links every legal point to the sections of legislation it reads, and every treatment
+  to the judgments at both ends, so you can follow the law from record to record.
+
 **Human-in-the-loop governance**
 
 - A review report shows every proposed change side by side with what's live now.
-- Reviewers approve in batches, hold back anything doubtful, and settle the few cases
-  the model couldn't decide.
+- Reviewers approve in batches, hold back anything doubtful, settle the few cases the
+  model couldn't decide, and add treatments it missed.
+- The same review steps run from the command line or an admin web portal.
 - A published update can be rolled back in one step.
 
 ## Coverage
 
 | Jurisdiction | Legislation | Case law | Status |
 |---|---|---|---|
-| Hong Kong | Ordinances and subsidiary legislation, with amendment warnings | Court of Final Appeal, Court of Appeal, Court of First Instance | Running daily |
+| Hong Kong | Ordinances and subsidiary legislation, with amendment warnings and court treatments | Court of Final Appeal, Court of Appeal, Court of First Instance | Running daily |
 | Other common law jurisdictions | — | — | Planned |
 
 noteup is built so a new jurisdiction is a new set of sources, not a new system: the
-records, the treatment rules and the review all stay the same.
+records, the treatment rules and the review all stay the same. Overseas cases and
+legislation that Hong Kong judgments cite are already kept as placeholders, so they link
+up once those jurisdictions are added.
 
 ## Applications
 
@@ -103,7 +115,10 @@ embeddings. These are some of the applications it is designed to support.
 - **Semantic legal search.** Ask in plain language, for example *"When can a tenant withhold
   rent for disrepair?"*, and get the relevant provisions and case points, in English or
   Chinese.
-- **Citator.** Look up a case or section and see everything that has happened to it since.
+- **Citator.** Look up a case or section and see everything that has happened to it since,
+  and follow the chain of treatments either way.
+- **How a section is read.** See the judgments that apply, interpret or read down a
+  section, and the points they make about it.
 - **Authority checking.** Scan a submission, opinion or contract for authorities that have
   since been overruled, repealed or amended.
 - **Current awareness.** Alerts when the law changes in a practice area, or in the law a
@@ -116,6 +131,8 @@ embeddings. These are some of the applications it is designed to support.
 
 - **Retrieval-augmented generation (RAG).** Ground LLM assistants in current law, with
   citations to the exact paragraph and warnings that keep them from relying on bad law.
+- **Graph retrieval.** Follow links from a point to the sections it reads, the cases it
+  relies on and the cases that later treated it, instead of relying on similarity alone.
 - **Regulatory change tracking.** What changed in the rules that matter to you, and when
   it takes effect.
 - **Case law analytics.** Which points are most followed, which are doubted, and how
@@ -165,6 +182,16 @@ One record per provision or legal point, in Postgres with pgvector:
 | `authority_note` | Warnings and treatment notes. Pass it to your model alongside `text` |
 | `in_force` | `false` for overruled or reversed points. Filter on it in search |
 | `id`, `source`, `type`, `jurisdiction` | Stable ID (`hk-leg:cap622g:s5`, `hk-case:2024-hkcfa-12:para48`), link to the official source, and where it applies |
+
+Around the records sits a citation graph, published through the same review:
+
+- **Parents.** Every record belongs to a judgment or an Ordinance, with its title,
+  citation, court, date and official link. Cases and enactments that are cited but not
+  held (overseas, or older than the collection) get placeholders, so no link ever
+  points nowhere.
+- **Links.** One per treatment, from the later judgment (and its point, where one point
+  quotes the paragraph) to the earlier point or judgment, with its kind and the court's
+  words; and one from each case point to each section of legislation it reads.
 
 Embeddings are created for you, so records are ready for semantic search. LLM output is
 never trusted as is: it's checked against the source before it becomes a record, and
@@ -221,25 +248,31 @@ noteup review approve                     # or: reject --reason "…"
 noteup review rollback <review>           # undo an approved review
 ```
 
+Every step is a Postgres function, so the command line and an admin web portal run
+exactly the same code. The portal lists each judgment's points to choose from when a
+reviewer settles a treatment or adds one the model missed, so nobody types a record ID.
+Each call is one statement, so it happens completely or not at all.
+
 ## Deployment
 
 One program and one database, so deployment stays small. The same code runs locally or
 in the cloud; only settings change.
 
-| | Today | Cloud (planned) |
+| | Today | Planned |
 |---|---|---|
 | **Scheduling** | systemd timer on a Linux machine, nightly | Azure Container Apps Job on a schedule |
-| **Database** | PostgreSQL 17 + pgvector in Docker | Azure Database for PostgreSQL with pgvector |
+| **Database** | Azure Database for PostgreSQL 17 with pgvector | (same) |
 | **File store** | Local disk, content-addressed | Azure Files share |
-| **LLM** | Azure OpenAI, or the OpenAI Codex CLI | Azure OpenAI |
+| **LLM** | OpenAI Codex CLI, or Azure OpenAI | Azure OpenAI |
 | **Embeddings** | Azure OpenAI `text-embedding-3-small` | Azure OpenAI `text-embedding-3-small` |
 
 - **Configuration** is all environment variables; secrets stay out of the repository.
 - **Schema upgrades** are additive and idempotent: `noteup db init` adds whatever is
   missing, so updating is "pull, init, run".
 - **Least privilege** in the database: the sync role writes everything except the live
-  table, and only approve and rollback use the role that can publish.
-- **No export step.** The search application reads the live table directly, so what
+  tables, only approve and rollback use the role that can publish, and the portal's role
+  can run the review functions but write no table itself.
+- **No export step.** The search application reads the live tables directly, so what
   reviewers approve is exactly what users get.
 
 ## Engineering highlights
@@ -271,11 +304,30 @@ aside before any LLM call.
 ### A rule-grounded AI citator
 
 Each treatment is resolved by neutral citation, case number or law-report citation. Fixed
-rules decide the effect: a note for *followed / applied / approved*, a warning for
-*doubted / criticised / disapproved*, and *not in force* for *overruled / reversed*, but
-only when the court can do it (the CFA, or a higher court than the one that decided the
-point). The LLM chooses the affected point from an enum of real record IDs, so it can't
-invent one. Anything unclear goes to a reviewer, not into search.
+rules decide the effect: a note for *followed / applied / approved / explained*, a warning
+for *doubted / criticised / disapproved / limited / not followed*, and *not in force* for
+*overruled*, but only when the court can do it (the CFA, or a higher court than the one
+that decided the point). Reversal and affirmance on appeal apply to the whole judgment,
+and a reversal that is itself reversed says so. The LLM chooses the affected point from
+an enum of real record IDs, given the whole paragraph that treats it, so it can't invent
+one. Anything unclear goes to a reviewer, not into search.
+
+The same read lists what the court does to legislation (applies, interprets, reads down,
+holds inconsistent with the Basic Law or the Bill of Rights, upholds), and a separate read
+of the Government's explanation of each new Bill finds the court decisions the law
+reverses, changes or codifies. All three feed one treatments table and the same rules.
+
+### Matching legislation references in code
+
+Each point names the legislation it relies on as the court wrote it: "s.52(3) of the
+Companies Ordinance", "RHC O.53 r.4", "BORO art.11", "《基本法》第二十四條". Code, with no
+model calls, matches these to the right section record: by Cap. number, English or
+Chinese title, common short names, and the date of the judgment (the old and new
+Companies Ordinances share a name). A reference that names a place or calls itself an
+Act is overseas and is never matched to a Hong Kong Ordinance, even one with the same
+words: the *Theft Act 1968* is not the *Theft Ordinance*. Enactments we don't hold get
+placeholders with their place, and every reference is matched again on each run, so
+they link without any re-reading once that legislation is added.
 
 ### Stable identity across re-reads
 
@@ -299,7 +351,11 @@ stay attached.
 - A Postgres **advisory lock** prevents overlapping runs.
 - An **LLM response cache** keyed on prompt version, model and input makes re-runs free.
 - **Spending and usage caps** stop reading cleanly and resume on the next run.
-- **Reading hours** confine LLM calls to a nightly window.
+- **Reading hours** confine LLM calls to a nightly window, and rate limits are waited out
+  within it rather than ending the night.
+- Judgments are read **in parallel**, with each one's points and treatments together, so
+  a run that stops early never leaves a judgment half read.
+- A lost database connection stops the run cleanly, and the run is still recorded.
 - Judgments are read **newest first**, so the most useful law arrives first while the
   historical backlog works through.
 - A run log and a `status` command show runs, failures, backlog, usage and spend at a glance.
@@ -307,7 +363,7 @@ stay attached.
 
 ## Quality
 
-- **73 tests** run against a real Postgres database, with saved source pages and recorded
+- **162 tests** run against a real Postgres database, with saved source pages and recorded
   LLM answers, so they're fast, deterministic and free.
 - A **hand-checked golden set** of judgments measures extraction quality (points and
   treatments matched, missed and extra), re-run whenever a prompt or model changes.
@@ -320,17 +376,20 @@ stay attached.
 (chat and `text-embedding-3-small`) or the **OpenAI Codex CLI** as the LLM backend ·
 **tiktoken** · **pypdf** · **uv** · **pytest** · **Docker** · **systemd**
 
-About 4,200 lines of application code and 1,700 lines of tests. No frameworks and no extra
+About 6,400 lines of application code and 3,100 lines of tests. No frameworks and no extra
 services: one program and one database, by design.
 
 ## Roadmap
 
 - [x] Hong Kong legislation, amendment warnings and superior court judgments
 - [x] Treatment tracking, with overruled law kept and marked
+- [x] Treatments of legislation, and new laws that reverse or change case law
+- [x] A citation graph: parents and links between judgments, points and sections
+- [x] Review steps as database functions, shared by the command line and an admin portal
+- [x] Database in the cloud
 - [ ] More common law jurisdictions
 - [ ] Hong Kong judgments from all years and courts
-- [ ] Hosted deployment in the cloud
-- [ ] Reviews from Ask.Legal's admin portal
+- [ ] Scheduled runs in the cloud
 
 ## About
 
